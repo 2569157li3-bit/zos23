@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Splitter — Нарезка со звуком</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0a0c;
+            --bg-elevated: #12121a;
+            --bg-card: #1a1a24;
+            --fg: #e8e8ed;
+            --fg-muted: #6b6b7a;
+            --accent: #00d991;
+            --accent-dim: #00d99133;
+            --warning: #ff6b4a;
+            --border: #2a2a38;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--fg);
+            min-height: 100vh;
+        }
+
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+        .bg-grid {
+            background-image: 
+                linear-gradient(rgba(0, 217, 145, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 217, 145, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        .drop-zone {
+            border: 2px dashed var(--border);
+            transition: all 0.3s ease;
+        }
+
+        .drop-zone.dragover {
+            border-color: var(--accent);
+            background: var(--accent-dim);
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: var(--bg);
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px -10px var(--accent);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .segment-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            transition: all 0.2s ease;
+        }
+
+        .segment-card:hover {
+            border-color: var(--accent);
+        }
+
+        .video-preview {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+        }
+
+        @keyframes slide-up {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .animate-slide-up { animation: slide-up 0.4s ease-out forwards; }
+        .animate-slide-up-delay { animation: slide-up 0.4s ease-out 0.1s forwards; opacity: 0; }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            background: var(--border);
+            height: 4px;
+            border-radius: 2px;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: var(--accent);
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+        .scrollbar-thin::-webkit-scrollbar-track { background: var(--bg-elevated); }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .animate-spin { animation: spin 1s linear infinite; }
+    </style>
+</head>
+<body class="bg-grid">
+    <div class="min-h-screen p-4 md:p-8">
+        <!-- Header -->
+        <header class="max-w-6xl mx-auto mb-8 animate-slide-up">
+            <div class="flex items-center gap-3 mb-2">
+                <div class="w-10 h-10 rounded-lg bg-[var(--accent)] flex items-center justify-center">
+                    <svg class="w-6 h-6 text-[var(--bg)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </div>
+                <h1 class="font-mono text-2xl md:text-3xl font-bold tracking-tight">Video Splitter</h1>
+            </div>
+            <p class="text-[var(--fg-muted)] text-sm md:text-base">Нарезка видео с сохранением звука. Локальная обработка в браузере.</p>
+        </header>
+
+        <main class="max-w-6xl mx-auto">
+            <!-- Upload Section -->
+            <section id="upload-section" class="animate-slide-up-delay">
+                <div id="drop-zone" class="drop-zone rounded-2xl p-8 md:p-16 text-center cursor-pointer transition-all">
+                    <div class="max-w-md mx-auto">
+                        <div class="w-20 h-20 mx-auto mb-6 rounded-2xl bg-[var(--bg-card)] border border-[var(--border)] flex items-center justify-center">
+                            <svg class="w-10 h-10 text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                            </svg>
+                        </div>
+                        <h2 class="font-mono text-xl font-semibold mb-2">Перетащите видео сюда</h2>
+                        <p class="text-[var(--fg-muted)] mb-4">или нажмите для выбора файла</p>
+                        <p class="text-xs text-[var(--fg-muted)]">Поддерживаются: MP4, WebM, MOV, AVI, MKV</p>
+                    </div>
+                    <input type="file" id="file-input" accept="video/*" class="hidden">
+                </div>
+            </section>
+
+            <!-- Video Info Section -->
+            <section id="video-info-section" class="hidden mt-8">
+                <div class="grid md:grid-cols-3 gap-6">
+                    <!-- Preview -->
+                    <div class="md:col-span-2">
+                        <div class="video-preview rounded-xl overflow-hidden">
+                            <video id="video-preview" class="w-full max-h-[400px] bg-black" controls></video>
+                        </div>
+                        <div class="mt-4 p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
+                            <div class="flex items-start gap-3">
+                                <svg class="w-5 h-5 text-[var(--accent)] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                                <div>
+                                    <p class="text-sm font-medium">Обработка со звуком</p>
+                                    <p class="text-xs text-[var(--fg-muted)] mt-1">Видео обрабатывается в реальном времени (1x) для корректного захвата звука без искажений.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Info Panel -->
+                    <div class="bg-[var(--bg-card)] rounded-xl p-6 border border-[var(--border)]">
+                        <h3 class="font-mono font-semibold text-lg mb-4">Параметры</h3>
+                        
+                        <div class="space-y-4">
+                            <div>
+                                <span class="text-[var(--fg-muted)] text-sm">Файл</span>
+                                <p id="file-name" class="font-mono text-sm truncate">—</p>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <span class="text-[var(--fg-muted)] text-sm">Длительность</span>
+                                    <p id="duration" class="font-mono font-semibold text-lg">—</p>
+                                </div>
+                                <div>
+                                    <span class="text-[var(--fg-muted)] text-sm">Размер</span>
+                                    <p id="file-size" class="font-mono font-semibold text-lg">—</p>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <span class="text-[var(--fg-muted)] text-sm">Разрешение</span>
+                                    <p id="resolution" class="font-mono font-semibold">—</p>
+                                </div>
+                                <div>
+                                    <span class="text-[var(--fg-muted)] text-sm">Аудио</span>
+                                    <p id="audio-info" class="font-mono font-semibold">—</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr class="border-[var(--border)] my-6">
+
+                        <!-- Settings -->
+                        <div class="space-y-4">
+                            <div>
+                                <label class="text-[var(--fg-muted)] text-sm block mb-2">Длительность сегмента</label>
+                                <div class="flex items-center gap-3">
+                                    <input type="range" id="segment-duration" min="5" max="60" value="20" class="flex-1">
+                                    <span id="segment-value" class="font-mono font-semibold w-16 text-right">20 мин</span>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label class="text-[var(--fg-muted)] text-sm block mb-2">Качество видео</label>
+                                <select id="quality-select" class="w-full bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-4 py-2 font-mono text-sm focus:outline-none focus:border-[var(--accent)]">
+                                    <option value="200000">Минимальное (200 kbps)</option>
+                                    <option value="400000" selected>Низкое (400 kbps)</option>
+                                    <option value="800000">Среднее (800 kbps)</option>
+                                    <option value="1500000">Хорошее (1.5 Mbps)</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="text-[var(--fg-muted)] text-sm block mb-2">Масштаб</label>
+                                <select id="scale-select" class="w-full bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-4 py-2 font-mono text-sm focus:outline-none focus:border-[var(--accent)]">
+                                    <option value="0.25">25% (мини)</option>
+                                    <option value="0.4">40%</option>
+                                    <option value="0.5" selected>50% (рекомендуется)</option>
+                                    <option value="0.75">75%</option>
+                                    <option value="1">100%</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="text-[var(--fg-muted)] text-sm block mb-2">Формат</label>
+                                <select id="format-select" class="w-full bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-4 py-2 font-mono text-sm focus:outline-none focus:border-[var(--accent)]">
+                                    <option value="mp4">MP4 (Safari/Эмуляция)</option>
+                                    <option value="webm" selected>WebM (Chrome/Firefox)</option>
+                                </select>
+                                <p class="text-xs text-[var(--fg-muted)] mt-1">Chrome/Firefox поддерживают только WebM нативно</p>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 p-4 bg-[var(--bg-elevated)] rounded-lg border border-[var(--border)]">
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="text-[var(--fg-muted)] text-sm">Сегментов:</span>
+                                <span id="segments-count" class="font-mono font-bold text-[var(--accent)]">0</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-[var(--fg-muted)] text-sm">Примерное время:</span>
+                                <span id="estimated-time" class="font-mono font-bold">—</span>
+                            </div>
+                        </div>
+
+                        <button id="start-btn" class="btn-primary w-full mt-6 py-3 rounded-xl font-mono">
+                            Начать нарезку
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Processing Section -->
+            <section id="processing-section" class="hidden mt-8">
+                <div class="bg-[var(--bg-card)] rounded-xl p-8 border border-[var(--border)]">
+                    <div class="text-center mb-8">
+                        <div class="w-16 h-16 mx-auto mb-6 text-[var(--accent)]">
+                            <svg class="w-full h-full animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" opacity="0.2"/>
+                                <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                            </svg>
+                        </div>
+                        <h3 id="processing-title" class="font-mono text-xl font-semibold mb-2">Запись видео...</h3>
+                        <p id="processing-status" class="text-[var(--fg-muted)]">Подготовка</p>
+                    </div>
+
+                    <!-- Overall progress -->
+                    <div class="max-w-lg mx-auto mb-6">
+                        <div class="flex justify-between text-sm mb-2">
+                            <span class="text-[var(--fg-muted)]">Общий прогресс</span>
+                            <span id="progress-percent" class="font-mono font-bold">0%</span>
+                        </div>
+                        <div class="h-3 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
+                            <div id="overall-progress" class="h-full bg-[var(--accent)] transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Segment progress -->
+                    <div class="max-w-lg mx-auto">
+                        <div class="flex justify-between text-sm mb-2">
+                            <span class="text-[var(--fg-muted)]">Текущий сегмент</span>
+                            <span id="current-segment" class="font-mono">0 / 0</span>
+                        </div>
+                        <div class="h-2 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
+                            <div id="segment-progress" class="h-full bg-[var(--accent-dim)] transition-all duration-100" style="width: 0%"></div>
+                        </div>
+                        <p id="segment-time" class="text-center text-xs text-[var(--fg-muted)] mt-2">—</p>
+                    </div>
+
+                    <div class="mt-8 text-center">
+                        <button id="cancel-btn" class="px-6 py-2 rounded-lg border border-[var(--warning)] text-[var(--warning)] hover:bg-[var(--warning)] hover:text-[var(--bg)] transition-colors font-mono text-sm">
+                            Отменить
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Results Section -->
+            <section id="results-section" class="hidden mt-8">
+                <div class="bg-[var(--bg-card)] rounded-xl border border-[var(--border)] overflow-hidden">
+                    <div class="p-6 border-b border-[var(--border)] flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div>
+                            <h3 class="font-mono text-xl font-semibold">Готово!</h3>
+                            <p class="text-[var(--fg-muted)] text-sm mt-1">Файлы готовы к скачиванию</p>
+                        </div>
+                        <button id="download-all-btn" class="btn-primary px-6 py-2 rounded-lg font-mono text-sm flex items-center gap-2 whitespace-nowrap">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                            </svg>
+                            Скачать все (ZIP)
+                        </button>
+                    </div>
+                    
+                    <div id="segments-list" class="max-h-[400px] overflow-y-auto scrollbar-thin p-4">
+                        <!-- Segments will be inserted here -->
+                    </div>
+                    
+                    <div class="p-4 border-t border-[var(--border)] bg-[var(--bg-elevated)]">
+                        <div class="flex justify-between items-center">
+                            <span class="text-[var(--fg-muted)] text-sm">Общий размер:</span>
+                            <span id="total-size" class="font-mono font-bold">—</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6 text-center">
+                    <button id="reset-btn" class="px-6 py-3 rounded-xl border border-[var(--border)] text-[var(--fg-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors font-mono">
+                        Обработать другое видео
+                    </button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Hidden canvas and video for processing -->
+    <canvas id="processing-canvas" class="hidden"></canvas>
+    <video id="processing-video" class="hidden" playsinline></video>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script>
+        const state = {
+            videoFile: null,
+            videoDuration: 0,
+            segments: [],
+            isProcessing: false,
+            isCancelled: false,
+            originalVideoUrl: null,
+            hasAudio: false
+        };
+
+        const elements = {};
+
+        function formatDuration(seconds) {
+            if (!seconds || isNaN(seconds)) return '0:00';
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+            if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            return `${m}:${s.toString().padStart(2, '0')}`;
+        }
+
+        function formatFileSize(bytes) {
+            if (!bytes) return '0 B';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+            return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+        }
+
+        function initElements() {
+            elements.dropZone = document.getElementById('drop-zone');
+            elements.fileInput = document.getElementById('file-input');
+            elements.uploadSection = document.getElementById('upload-section');
+            elements.videoInfoSection = document.getElementById('video-info-section');
+            elements.processingSection = document.getElementById('processing-section');
+            elements.resultsSection = document.getElementById('results-section');
+            elements.videoPreview = document.getElementById('video-preview');
+            elements.fileName = document.getElementById('file-name');
+            elements.duration = document.getElementById('duration');
+            elements.fileSize = document.getElementById('file-size');
+            elements.resolution = document.getElementById('resolution');
+            elements.audioInfo = document.getElementById('audio-info');
+            elements.segmentDuration = document.getElementById('segment-duration');
+            elements.segmentValue = document.getElementById('segment-value');
+            elements.qualitySelect = document.getElementById('quality-select');
+            elements.scaleSelect = document.getElementById('scale-select');
+            elements.formatSelect = document.getElementById('format-select');
+            elements.segmentsCount = document.getElementById('segments-count');
+            elements.estimatedTime = document.getElementById('estimated-time');
+            elements.startBtn = document.getElementById('start-btn');
+            elements.cancelBtn = document.getElementById('cancel-btn');
+            elements.progressPercent = document.getElementById('progress-percent');
+            elements.processingTitle = document.getElementById('processing-title');
+            elements.processingStatus = document.getElementById('processing-status');
+            elements.currentSegment = document.getElementById('current-segment');
+            elements.segmentProgress = document.getElementById('segment-progress');
+            elements.overallProgress = document.getElementById('overall-progress');
+            elements.segmentTime = document.getElementById('segment-time');
+            elements.segmentsList = document.getElementById('segments-list');
+            elements.downloadAllBtn = document.getElementById('download-all-btn');
+            elements.resetBtn = document.getElementById('reset-btn');
+            elements.totalSize = document.getElementById('total-size');
+            elements.canvas = document.getElementById('processing-canvas');
+            elements.processingVideo = document.getElementById('processing-video');
+        }
+
+        function handleFile(file) {
+            if (!file || !file.type.startsWith('video/')) {
+                alert('Пожалуйста, выберите видеофайл');
+                return;
+            }
+
+            if (state.originalVideoUrl) URL.revokeObjectURL(state.originalVideoUrl);
+
+            state.videoFile = file;
+            state.originalVideoUrl = URL.createObjectURL(file);
+            elements.videoPreview.src = state.originalVideoUrl;
+
+            elements.videoPreview.onloadedmetadata = async () => {
+                state.videoDuration = elements.videoPreview.duration;
+                
+                // Check for audio tracks
+                try {
+                    // Modern way to detect audio
+                    if (elements.videoPreview.audioTracks) {
+                        state.hasAudio = elements.videoPreview.audioTracks.length > 0;
+                    } else {
+                        // Fallback: try to detect via mozCaptureStream
+                        const stream = elements.videoPreview.mozCaptureStream ? 
+                            elements.videoPreview.mozCaptureStream() : 
+                            elements.videoPreview.captureStream();
+                        state.hasAudio = stream.getAudioTracks().length > 0;
+                    }
+                } catch(e) {
+                    // Assume has audio if we can't detect
+                    state.hasAudio = true;
+                }
+                
+                updateVideoInfo();
+                showSection('info');
+            };
+        }
+
+        function updateVideoInfo() {
+            const file = state.videoFile;
+            const video = elements.videoPreview;
+
+            elements.fileName.textContent = file.name;
+            elements.duration.textContent = formatDuration(state.videoDuration);
+            elements.fileSize.textContent = formatFileSize(file.size);
+            elements.resolution.textContent = `${video.videoWidth}x${video.videoHeight}`;
+            elements.audioInfo.textContent = state.hasAudio ? 'Есть' : 'Нет';
+            
+            updateSegmentsCalculation();
+        }
+
+        function updateSegmentsCalculation() {
+            const segmentDuration = parseInt(elements.segmentDuration.value) * 60;
+            const segments = Math.ceil(state.videoDuration / segmentDuration);
+            
+            // Estimate processing time (1x speed for audio sync)
+            const totalProcessingTime = state.videoDuration;
+
+            elements.segmentsCount.textContent = segments;
+            elements.estimatedTime.textContent = formatDuration(totalProcessingTime);
+        }
+
+        function showSection(section) {
+            elements.uploadSection.classList.toggle('hidden', section !== 'upload');
+            elements.videoInfoSection.classList.toggle('hidden', section !== 'info');
+            elements.processingSection.classList.toggle('hidden', section !== 'processing');
+            elements.resultsSection.classList.toggle('hidden', section !== 'results');
+        }
+
+        function updateProgress(segIndex, totalSegments, segmentPercent, status) {
+            const overall = ((segIndex + segmentPercent / 100) / totalSegments) * 100;
+            elements.progressPercent.textContent = Math.round(overall) + '%';
+            elements.overallProgress.style.width = overall + '%';
+            elements.processingStatus.textContent = status;
+            elements.currentSegment.textContent = `${segIndex + 1} / ${totalSegments}`;
+            elements.segmentProgress.style.width = segmentPercent + '%';
+        }
+
+        async function processVideo() {
+            if (state.isProcessing) return;
+            
+            state.isProcessing = true;
+            state.isCancelled = false;
+            state.segments = [];
+
+            showSection('processing');
+            elements.processingTitle.textContent = 'Запись видео со звуком...';
+
+            const segmentDurationSec = parseInt(elements.segmentDuration.value) * 60;
+            const bitrate = parseInt(elements.qualitySelect.value);
+            const scale = parseFloat(elements.scaleSelect.value);
+            const requestedFormat = elements.formatSelect.value;
+            
+            const totalSegments = Math.ceil(state.videoDuration / segmentDurationSec);
+
+            const procVideo = elements.processingVideo;
+            procVideo.src = state.originalVideoUrl;
+            procVideo.muted = false; // Important: unmute to capture audio
+            
+            // Wait for video to be ready
+            await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => reject(new Error('Timeout loading video')), 30000);
+                procVideo.onloadeddata = () => { clearTimeout(timeout); resolve(); };
+                procVideo.onerror = () => { clearTimeout(timeout); reject(new Error('Failed to load video')); };
+            });
+
+            const canvas = elements.canvas;
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = Math.max(1, Math.round(procVideo.videoWidth * scale));
+            canvas.height = Math.max(1, Math.round(procVideo.videoHeight * scale));
+
+            // Determine supported MIME type
+            let mimeType;
+            const formatMap = {
+                'mp4': ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=avc1,opus', 'video/mp4'],
+                'webm': ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,vorbis', 'video/webm']
+            };
+
+            const possibleTypes = requestedFormat === 'mp4' ? 
+                [...formatMap.mp4, ...formatMap.webm] : 
+                [...formatMap.webm, ...formatMap.mp4];
+
+            mimeType = possibleTypes.find(type => {
+                try {
+                    return MediaRecorder.isTypeSupported(type);
+                } catch(e) { return false; }
+            }) || 'video/webm';
+
+            console.log('Using MIME type:', mimeType);
+            const finalExt = mimeType.includes('mp4') ? 'mp4' : 'webm';
+
+            for (let segIndex = 0; segIndex < totalSegments; segIndex++) {
+                if (state.isCancelled) {
+                    state.isProcessing = false;
+                    showSection('info');
+                    return;
+                }
+
+                const startTime = segIndex * segmentDurationSec;
+                const endTime = Math.min(startTime + segmentDurationSec, state.videoDuration);
+                const duration = endTime - startTime;
+
+                try {
+                    const blob = await recordSegment(
+                        procVideo, canvas, ctx, 
+                        startTime, duration, 
+                        bitrate, mimeType,
+                        segIndex, totalSegments
+                    );
+
+                    if (state.isCancelled) {
+                        state.isProcessing = false;
+                        showSection('info');
+                        return;
+                    }
+
+                    state.segments.push({
+                        index: segIndex + 1,
+                        start: startTime,
+                        end: endTime,
+                        duration: duration,
+                        blob: blob,
+                        size: blob.size,
+                        ext: finalExt
+                    });
+
+                } catch (error) {
+                    console.error('Segment error:', error);
+                    if (state.isCancelled) {
+                        state.isProcessing = false;
+                        showSection('info');
+                        return;
+                    }
+                }
+            }
+
+            state.isProcessing = false;
+            
+            if (state.segments.length > 0) {
+                showResults();
+            } else {
+                alert('Не удалось обработать видео.');
+                showSection('info');
+            }
+        }
+
+        function recordSegment(video, canvas, ctx, startTime, duration, bitrate, mimeType, segIndex, totalSegments) {
+            return new Promise((resolve, reject) => {
+                
+                // Create canvas video stream
+                const canvasStream = canvas.captureStream(30);
+                
+                // Try to get audio from video element
+                let audioTracks = [];
+                try {
+                    // Firefox uses mozCaptureStream, Chrome/Safari use captureStream
+                    const videoStream = video.mozCaptureStream ? 
+                        video.mozCaptureStream() : 
+                        video.captureStream();
+                    
+                    audioTracks = videoStream.getAudioTracks();
+                    console.log(`Audio tracks found: ${audioTracks.length}`);
+                } catch(e) {
+                    console.warn('Could not capture audio stream:', e);
+                }
+
+                // Combine video (from canvas) and audio (from video element)
+                const combinedTracks = [...canvasStream.getVideoTracks(), ...audioTracks];
+                const combinedStream = new MediaStream(combinedTracks);
+
+                const recorder = new MediaRecorder(combinedStream, {
+                    mimeType: mimeType,
+                    videoBitsPerSecond: bitrate
+                });
+
+                const chunks = [];
+                let animationId = null;
+
+                recorder.ondataavailable = (e) => {
+                    if (e.data && e.data.size > 0) chunks.push(e.data);
+                };
+
+                recorder.onstop = () => {
+                    if (animationId) cancelAnimationFrame(animationId);
+                    video.pause();
+                    const blob = new Blob(chunks, { type: mimeType });
+                    resolve(blob);
+                };
+
+                recorder.onerror = (e) => {
+                    if (animationId) cancelAnimationFrame(animationId);
+                    video.pause();
+                    reject(e);
+                };
+
+                video.currentTime = startTime;
+                video.playbackRate = 1.0; // MUST be 1.0 for correct audio pitch
+
+                const onSeeked = () => {
+                    video.removeEventListener('seeked', onSeeked);
+                    recorder.start(1000);
+                    
+                    video.play().catch(e => {
+                        recorder.stop();
+                        reject(e);
+                    });
+
+                    const targetEndTime = startTime + duration;
+
+                    function draw() {
+                        if (state.isCancelled) {
+                            recorder.stop();
+                            return;
+                        }
+
+                        const currentTime = video.currentTime;
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                        const segmentProgress = Math.min(100, ((currentTime - startTime) / duration) * 100);
+                        const timeDisplay = `${formatDuration(currentTime - startTime)} / ${formatDuration(duration)}`;
+                        
+                        updateProgress(segIndex, totalSegments, segmentProgress, `Запись сегмента ${segIndex + 1}...`);
+                        elements.segmentTime.textContent = timeDisplay;
+
+                        if (currentTime >= targetEndTime - 0.1) {
+                            recorder.stop();
+                            return;
+                        }
+
+                        animationId = requestAnimationFrame(draw);
+                    }
+
+                    animationId = requestAnimationFrame(draw);
+                };
+
+                video.addEventListener('seeked', onSeeked);
+            });
+        }
+
+        function showResults() {
+            showSection('results');
+            elements.segmentsList.innerHTML = '';
+
+            let totalSize = 0;
+            const baseName = state.videoFile ? state.videoFile.name.replace(/\.[^/.]+$/, '') : 'video';
+
+            state.segments.forEach((segment) => {
+                totalSize += segment.size;
+                
+                const card = document.createElement('div');
+                card.className = 'segment-card p-4 rounded-xl flex items-center gap-4 mb-3';
+                
+                const downloadBtn = document.createElement('button');
+                downloadBtn.className = 'p-2 rounded-lg border border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors shrink-0';
+                downloadBtn.setAttribute('aria-label', `Скачать сегмент ${segment.index}`);
+                downloadBtn.innerHTML = `
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                    </svg>
+                `;
+
+                downloadBtn.addEventListener('click', () => {
+                    triggerDownload(segment.blob, `${baseName}_part${String(segment.index).padStart(2, '0')}.${segment.ext}`);
+                });
+
+                card.innerHTML = `
+                    <div class="w-12 h-12 rounded-lg bg-[var(--accent-dim)] flex items-center justify-center shrink-0">
+                        <span class="font-mono font-bold text-[var(--accent)]">${segment.index}</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="font-mono font-semibold truncate">Часть ${segment.index}</p>
+                        <p class="text-[var(--fg-muted)] text-sm">${formatDuration(segment.start)} - ${formatDuration(segment.end)} (${segment.ext.toUpperCase()})</p>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <p class="font-mono font-semibold">${formatFileSize(segment.size)}</p>
+                        <p class="text-[var(--fg-muted)] text-xs">${segment.ext.toUpperCase()}</p>
+                    </div>
+                `;
+                
+                card.appendChild(downloadBtn);
+                elements.segmentsList.appendChild(card);
+            });
+
+            elements.totalSize.textContent = formatFileSize(totalSize);
+        }
+
+        function triggerDownload(blob, filename) {
+            if (!blob) return;
+            
+            try {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 100);
+            } catch (e) {
+                console.error('Download failed', e);
+            }
+        }
+
+        async function downloadAllAsZip() {
+            if (typeof JSZip === 'undefined') {
+                alert('Библиотека архивации не загружена.');
+                return;
+            }
+
+            const zip = new JSZip();
+            const baseName = state.videoFile ? state.videoFile.name.replace(/\.[^/.]+$/, '') : 'video';
+            const folder = zip.folder(baseName + '_segments');
+
+            state.segments.forEach((segment) => {
+                const fileName = `${baseName}_part${String(segment.index).padStart(2, '0')}.${segment.ext}`;
+                folder.file(fileName, segment.blob);
+            });
+
+            elements.downloadAllBtn.disabled = true;
+            elements.downloadAllBtn.innerHTML = '<span class="animate-spin mr-2">...</span> Упаковка...';
+
+            try {
+                const content = await zip.generateAsync({ 
+                    type: 'blob',
+                    compression: 'DEFLATE',
+                    compressionOptions: { level: 1 }
+                }, (metadata) => {
+                    elements.downloadAllBtn.textContent = `Упаковка: ${Math.round(metadata.percent)}%`;
+                });
+
+                triggerDownload(content, `${baseName}_segments.zip`);
+                
+                elements.downloadAllBtn.innerHTML = `
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Готово!
+                `;
+                
+                setTimeout(() => {
+                    elements.downloadAllBtn.innerHTML = `
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                        </svg>
+                        Скачать все (ZIP)
+                    `;
+                    elements.downloadAllBtn.disabled = false;
+                }, 2000);
+
+            } catch (error) {
+                console.error('ZIP error:', error);
+                alert('Ошибка создания архива.');
+                elements.downloadAllBtn.disabled = false;
+                elements.downloadAllBtn.textContent = 'Скачать все (ZIP)';
+            }
+        }
+
+        function reset() {
+            if (state.originalVideoUrl) URL.revokeObjectURL(state.originalVideoUrl);
+            
+            state.videoFile = null;
+            state.videoDuration = 0;
+            state.segments = [];
+            state.isCancelled = false;
+            state.isProcessing = false;
+            state.originalVideoUrl = null;
+            
+            elements.videoPreview.src = '';
+            elements.processingVideo.src = '';
+            elements.fileInput.value = '';
+            showSection('upload');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initElements();
+
+            elements.dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                elements.dropZone.classList.add('dragover');
+            });
+
+            elements.dropZone.addEventListener('dragleave', () => {
+                elements.dropZone.classList.remove('dragover');
+            });
+
+            elements.dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                elements.dropZone.classList.remove('dragover');
+                if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+            });
+
+            elements.dropZone.addEventListener('click', () => elements.fileInput.click());
+
+            elements.fileInput.addEventListener('change', (e) => {
+                if (e.target.files[0]) handleFile(e.target.files[0]);
+            });
+
+            elements.segmentDuration.addEventListener('input', (e) => {
+                elements.segmentValue.textContent = e.target.value + ' мин';
+                updateSegmentsCalculation();
+            });
+
+            elements.qualitySelect.addEventListener('change', updateSegmentsCalculation);
+
+            elements.startBtn.addEventListener('click', processVideo);
+
+            elements.cancelBtn.addEventListener('click', () => { state.isCancelled = true; });
+
+            elements.downloadAllBtn.addEventListener('click', downloadAllAsZip);
+
+            elements.resetBtn.addEventListener('click', reset);
+
+            elements.dropZone.setAttribute('tabindex', '0');
+            elements.dropZone.setAttribute('role', 'button');
+            elements.dropZone.setAttribute('aria-label', 'Загрузить видеофайл');
+            
+            elements.dropZone.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    elements.fileInput.click();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

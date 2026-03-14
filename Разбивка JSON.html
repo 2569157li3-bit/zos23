@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON Splitter</title>
+    <!-- Подключаем библиотеку JSZip для возможности скачать всё одним архивом (опционально) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: #1e1e1e;
+            color: #e0e0e0;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* Чтобы контент не уезжал при длинном списке */
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .app-container {
+            background-color: #2b2b2b;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            width: 100%;
+            max-width: 500px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        h2 { text-align: center; color: #fff; margin-bottom: 5px; }
+        p.subtitle { text-align: center; font-size: 0.85rem; color: #aaa; margin-bottom: 10px; }
+
+        .input-group { display: flex; flex-direction: column; gap: 8px; }
+        label { font-size: 0.9rem; color: #bbbbbb; }
+
+        input[type="text"], input[type="file"], select {
+            background-color: #3c3c3c;
+            border: 1px solid #555;
+            color: #fff;
+            padding: 10px;
+            border-radius: 6px;
+            outline: none;
+        }
+
+        input[type="file"] { cursor: pointer; padding: 8px; }
+        input[type="file"]::file-selector-button {
+            background-color: #0e639c;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+
+        .checkbox-group { display: flex; flex-wrap: wrap; gap: 15px; }
+        .checkbox-item { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+        input[type="checkbox"] { accent-color: #0e639c; transform: scale(1.2); }
+
+        .convert-btn {
+            background-color: #0e639c;
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            text-transform: uppercase;
+        }
+        .convert-btn:hover { background-color: #1177bb; }
+        .convert-btn:disabled { background-color: #555; cursor: not-allowed; }
+
+        .status { text-align: center; font-size: 0.85rem; color: #4ec9b0; min-height: 20px; }
+
+        /* Стили для результатов */
+        .results-container {
+            margin-top: 10px;
+            border-top: 1px solid #444;
+            padding-top: 15px;
+            display: none; /* Скрыто по умолчанию */
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .results-list {
+            max-height: 300px;
+            overflow-y: auto;
+            background-color: #1e1e1e;
+            border-radius: 6px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #2b2b2b;
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid #444;
+        }
+
+        .file-name { font-size: 0.9rem; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; }
+
+        .download-single-btn {
+            background-color: #3c3c3c;
+            color: #4ec9b0;
+            border: 1px solid #555;
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+        .download-single-btn:hover { background-color: #4e4e4e; }
+
+        .zip-btn {
+            background-color: #2a9d8f;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        .zip-btn:hover { background-color: #21867a; }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <h2>JSON Splitter</h2>
+        <p class="subtitle">Универсальная разбивка JSON на Markdown</p>
+
+        <div class="input-group">
+            <label for="chunkSize">Лимит символов в файле:</label>
+            <select id="chunkSize">
+                <option value="50000">50,000</option>
+                <option value="100000">100,000</option>
+                <option value="200000">200,000</option>
+                <option value="250000" selected>250,000</option>
+                <option value="500000">500,000</option>
+            </select>
+        </div>
+
+        <div class="input-group">
+            <label for="fileName">Имя файла (без расширения):</label>
+            <input type="text" id="fileName" value="output" placeholder="Например: data_dump">
+        </div>
+
+        <div class="input-group">
+            <label for="fileInput">Исходный JSON файл:</label>
+            <input type="file" id="fileInput" accept=".json">
+        </div>
+
+        <div class="input-group">
+            <label>Опции:</label>
+            <div class="checkbox-group">
+                <label class="checkbox-item">
+                    <input type="checkbox" id="formatJson" checked>
+                    <span>Форматировать JSON</span>
+                </label>
+                <label class="checkbox-item">
+                    <input type="checkbox" id="addHeaders" checked>
+                    <span>Добавить заголовки MD</span>
+                </label>
+            </div>
+        </div>
+
+        <button id="convertBtn" class="convert-btn" disabled>Разбить файл</button>
+        
+        <div id="status" class="status"></div>
+
+        <!-- Контейнер для результатов -->
+        <div id="resultsContainer" class="results-container">
+            <div class="results-header">
+                <span id="resultsCount" style="color:#aaa; font-size:0.9rem;">Создано файлов: 0</span>
+                <button id="downloadAllZip" class="zip-btn">Скачать всё (.zip)</button>
+            </div>
+            <div id="resultsList" class="results-list">
+                <!-- Сюда будут добавляться кнопки -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const convertBtn = document.getElementById('convertBtn');
+        const chunkSizeSelect = document.getElementById('chunkSize');
+        const fileNameInput = document.getElementById('fileName');
+        const formatJsonCheck = document.getElementById('formatJson');
+        const addHeadersCheck = document.getElementById('addHeaders');
+        const statusDiv = document.getElementById('status');
+        
+        const resultsContainer = document.getElementById('resultsContainer');
+        const resultsList = document.getElementById('resultsList');
+        const resultsCount = document.getElementById('resultsCount');
+        const downloadAllZipBtn = document.getElementById('downloadAllZip');
+
+        // Глобальный массив для хранения разбитых данных
+        let chunksData = [];
+
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                convertBtn.disabled = false;
+                const defaultName = fileInput.files[0].name.replace('.json', '');
+                fileNameInput.value = defaultName;
+                // Сброс предыдущих результатов
+                resultsContainer.style.display = 'none';
+                resultsList.innerHTML = '';
+                statusDiv.textContent = '';
+            } else {
+                convertBtn.disabled = true;
+            }
+        });
+
+        convertBtn.addEventListener('click', async () => {
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            statusDiv.textContent = "Чтение файла...";
+            convertBtn.disabled = true;
+            chunksData = []; // Очистка массива
+
+            try {
+                const text = await file.text();
+                const chunkSize = parseInt(chunkSizeSelect.value);
+                const baseName = fileNameInput.value || "output";
+                const shouldFormat = formatJsonCheck.checked;
+                const addHeaders = addHeadersCheck.checked;
+
+                let contentToSplit = text;
+
+                if (shouldFormat) {
+                    try {
+                        statusDiv.textContent = "Парсинг и форматирование...";
+                        const json = JSON.parse(text);
+                        contentToSplit = JSON.stringify(json, null, 2);
+                    } catch (e) {
+                        alert("Ошибка: Это не валидный JSON файл. Форматирование невозможно.");
+                        contentToSplit = text;
+                    }
+                }
+
+                statusDiv.textContent = "Разбивка на части...";
+                
+                // Цикл разбивки
+                let partNumber = 1;
+                for (let i = 0; i < contentToSplit.length; i += chunkSize) {
+                    const chunk = contentToSplit.slice(i, i + chunkSize);
+                    
+                    let fileContent = chunk;
+                    let fileName = `${baseName}_part_${partNumber}.md`;
+
+                    if (addHeaders) {
+                        // Для заголовка мы не знаем общее кол-во заранее в этом цикле, 
+                        // но можем посчитать примерное или оставить просто номер части
+                        const header = `# Часть ${partNumber}\n\n\`\`\`json\n`;
+                        const footer = "\n```";
+                        fileContent = header + chunk + footer;
+                    }
+
+                    // Сохраняем объект с данными в массив
+                    chunksData.push({
+                        name: fileName,
+                        content: fileContent,
+                        part: partNumber
+                    });
+
+                    partNumber++;
+                }
+
+                statusDiv.textContent = "Готово!";
+                displayResults();
+
+            } catch (error) {
+                console.error(error);
+                statusDiv.textContent = "Произошла ошибка при обработке.";
+            } finally {
+                convertBtn.disabled = false;
+            }
+        });
+
+        // Функция отрисовки списка файлов
+        function displayResults() {
+            resultsList.innerHTML = ''; // очистка списка
+            resultsCount.textContent = `Создано файлов: ${chunksData.length}`;
+            
+            if (chunksData.length > 0) {
+                resultsContainer.style.display = 'block';
+            }
+
+            chunksData.forEach((data) => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'file-item';
+
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'file-name';
+                nameSpan.textContent = data.name;
+                nameSpan.title = data.name; // Полное имя при наведении
+
+                const dlBtn = document.createElement('button');
+                dlBtn.className = 'download-single-btn';
+                dlBtn.textContent = 'Скачать';
+                
+                // Вешаем событие на скачивание конкретного файла
+                dlBtn.addEventListener('click', () => {
+                    downloadFile(data.content, data.name);
+                });
+
+                itemDiv.appendChild(nameSpan);
+                itemDiv.appendChild(dlBtn);
+                resultsList.appendChild(itemDiv);
+            });
+        }
+
+        // Скачивание одного файла
+        function downloadFile(content, fileName) {
+            const a = document.createElement('a');
+            const blob = new Blob([content], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // Скачивание всех файлов в ZIP (используем JSZip)
+        downloadAllZipBtn.addEventListener('click', async () => {
+            if (chunksData.length === 0) return;
+            
+            statusDiv.textContent = "Создание архива...";
+            downloadAllZipBtn.disabled = true;
+
+            try {
+                const zip = new JSZip();
+                
+                // Добавляем все файлы в архив
+                chunksData.forEach(data => {
+                    zip.file(data.name, data.content);
+                });
+
+                // Генерируем блоб архива
+                const content = await zip.generateAsync({ type: "blob" });
+                
+                // Скачиваем архив
+                const a = document.createElement('a');
+                const url = URL.createObjectURL(content);
+                a.href = url;
+                a.download = `${fileNameInput.value}_split.zip`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                statusDiv.textContent = "Архив скачан.";
+            } catch (err) {
+                console.error(err);
+                statusDiv.textContent = "Ошибка создания архива.";
+            } finally {
+                downloadAllZipBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

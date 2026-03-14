@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Рукописный редактор</title>
+    <link href="https://fonts.googleapis.com/css2?family=Marck+Script&family=Bad+Script&family=Caveat:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --paper: #fefefe;
+            --paper-warm: #faf8f5;
+            --ink: #0a0a0a;
+            --ink-gray: #2a2a2a;
+            --line: #b8d4e8;
+            --margin: #c9a0a0;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: #1a1915;
+            font-family: 'Bad Script', cursive;
+        }
+
+        /* SVG Filters for handwriting effect */
+        .handwriting-filter {
+            filter: url(#handwrite);
+        }
+
+        /* Paper */
+        .paper-wrapper {
+            position: relative;
+            background: var(--paper);
+            border-radius: 3px;
+            box-shadow: 
+                0 1px 3px rgba(0,0,0,0.08),
+                0 8px 24px rgba(0,0,0,0.12),
+                0 24px 48px rgba(0,0,0,0.1);
+        }
+
+        .paper-lines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent 0px,
+                    transparent 27px,
+                    var(--line) 27px,
+                    var(--line) 28px
+                );
+            pointer-events: none;
+            opacity: 0.5;
+        }
+
+        .margin-line {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 50px;
+            width: 1.5px;
+            background: var(--margin);
+            opacity: 0.5;
+        }
+
+        /* Textarea with handwriting style */
+        .writing-area {
+            font-family: 'Marck Script', cursive;
+            font-size: 32px;
+            line-height: 28px;
+            color: var(--ink);
+            background: transparent;
+            border: none;
+            outline: none;
+            resize: none;
+            width: 100%;
+            min-height: 450px;
+            padding: 24px 30px 24px 65px;
+            position: relative;
+            z-index: 2;
+            letter-spacing: 0.5px;
+            filter: url(#handwrite);
+        }
+
+        .writing-area::placeholder {
+            color: #888;
+            opacity: 0.5;
+            font-family: 'Bad Script', cursive;
+        }
+
+        /* Ink variation effect */
+        .writing-area {
+            -webkit-text-stroke: 0.1px transparent;
+            text-rendering: optimizeLegibility;
+        }
+
+        /* Buttons */
+        .style-btn {
+            padding: 10px 18px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 6px;
+            color: #c4b8a8;
+            font-family: 'Bad Script', cursive;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+
+        .style-btn:hover {
+            background: rgba(255,255,255,0.12);
+            border-color: rgba(255,255,255,0.25);
+        }
+
+        .style-btn.active {
+            background: rgba(139, 90, 43, 0.3);
+            border-color: rgba(139, 90, 43, 0.5);
+            color: #e8dfd0;
+        }
+
+        .color-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+
+        .color-btn:hover {
+            transform: scale(1.15);
+        }
+
+        .color-btn.active {
+            border-color: #fff;
+            transform: scale(1.1);
+        }
+
+        /* Entrance animations */
+        @keyframes fadeSlide {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .animate-in {
+            animation: fadeSlide 0.6s ease-out forwards;
+        }
+
+        .delay-1 { animation-delay: 0.1s; opacity: 0; }
+        .delay-2 { animation-delay: 0.2s; opacity: 0; }
+        .delay-3 { animation-delay: 0.3s; opacity: 0; }
+
+        /* Header */
+        .main-title {
+            font-family: 'Marck Script', cursive;
+            font-size: clamp(36px, 6vw, 52px);
+            color: #e8dfd0;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        /* Counter */
+        .counter {
+            font-family: 'Bad Script', cursive;
+            color: #7a6a5a;
+            font-size: 14px;
+        }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .writing-area {
+                font-size: 26px;
+                line-height: 26px;
+                padding-left: 50px;
+            }
+            .margin-line {
+                left: 35px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+            }
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <!-- SVG Filters -->
+    <svg style="position: absolute; width: 0; height: 0;">
+        <defs>
+            <filter id="handwrite" x="-5%" y="-5%" width="110%" height="110%">
+                <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" result="noise"/>
+                <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R" yChannelSelector="G"/>
+            </filter>
+        </defs>
+    </svg>
+
+    <main class="max-w-2xl mx-auto">
+        <!-- Header -->
+        <header class="text-center mb-8 animate-in">
+            <h1 class="main-title mb-2">Рукописный редактор</h1>
+            <p style="color: #8a7a6a; font-size: 18px;">Пишите как от руки</p>
+        </header>
+
+        <!-- Tools -->
+        <div class="flex flex-wrap items-center justify-between gap-4 mb-5 animate-in delay-1">
+            <!-- Font styles -->
+            <div class="flex gap-2">
+                <button class="style-btn active" data-font="Marck Script" data-size="32">Марк</button>
+                <button class="style-btn" data-font="Bad Script" data-size="26">Бад</button>
+                <button class="style-btn" data-font="Caveat" data-size="30">Кавеат</button>
+            </div>
+
+            <!-- Colors -->
+            <div class="flex gap-2">
+                <button class="color-btn active" data-color="#0a0a0a" style="background: #0a0a0a;" title="Чёрный"></button>
+                <button class="color-btn" data-color="#1a2a4a" style="background: #1a2a4a;" title="Синий"></button>
+                <button class="color-btn" data-color="#3a2a1a" style="background: #3a2a1a;" title="Коричневый"></button>
+            </div>
+        </div>
+
+        <!-- Paper -->
+        <div class="paper-wrapper animate-in delay-2" id="paperWrapper">
+            <div class="paper-lines"></div>
+            <div class="margin-line"></div>
+            <textarea 
+                class="writing-area" 
+                id="textArea"
+                placeholder="Начните писать..."
+                spellcheck="false"
+                aria-label="Поле для рукописного текста"
+            ></textarea>
+        </div>
+
+        <!-- Footer -->
+        <div class="flex justify-between items-center mt-4 animate-in delay-3">
+            <span class="counter" id="counter">0 символов</span>
+            <button class="style-btn" id="saveBtn" style="background: rgba(139, 90, 43, 0.2);">
+                Сохранить изображение
+            </button>
+        </div>
+    </main>
+
+    <script>
+        const textArea = document.getElementById('textArea');
+        const counter = document.getElementById('counter');
+        const fontBtns = document.querySelectorAll('.style-btn[data-font]');
+        const colorBtns = document.querySelectorAll('.color-btn');
+        const saveBtn = document.getElementById('saveBtn');
+        const paperWrapper = document.getElementById('paperWrapper');
+
+        // Counter
+        function updateCounter() {
+            const n = textArea.value.length;
+            let ending = 'ов';
+            if (n % 10 === 1 && n % 100 !== 11) ending = '';
+            else if ([2,3,4].includes(n % 10) && ![12,13,14].includes(n % 100)) ending = 'а';
+            counter.textContent = n + ' символ' + ending;
+        }
+
+        textArea.addEventListener('input', updateCounter);
+
+        // Font selection
+        fontBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                fontBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                textArea.style.fontFamily = "'" + btn.dataset.font + "', cursive";
+                textArea.style.fontSize = btn.dataset.size + 'px';
+                textArea.focus();
+            });
+        });
+
+        // Color selection
+        colorBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                colorBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                textArea.style.color = btn.dataset.color;
+                textArea.focus();
+            });
+        });
+
+        // Save as image
+        saveBtn.addEventListener('click', () => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const scale = 2;
+            
+            canvas.width = paperWrapper.offsetWidth * scale;
+            canvas.height = Math.max(paperWrapper.offsetHeight, textArea.scrollHeight + 60) * scale;
+            
+            ctx.scale(scale, scale);
+            
+            // Paper background
+            ctx.fillStyle = '#fefefe';
+            ctx.fillRect(0, 0, canvas.width / scale, canvas.height / scale);
+            
+            // Lines
+            ctx.strokeStyle = '#b8d4e8';
+            ctx.lineWidth = 1;
+            ctx.globalAlpha = 0.5;
+            
+            const lineH = 28;
+            for (let y = 28; y < canvas.height / scale; y += lineH) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width / scale, y);
+                ctx.stroke();
+            }
+            
+            // Margin
+            ctx.strokeStyle = '#c9a0a0';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(50, 0);
+            ctx.lineTo(50, canvas.height / scale);
+            ctx.stroke();
+            
+            ctx.globalAlpha = 1;
+            
+            // Text
+            const fontName = textArea.style.fontFamily || "'Marck Script'";
+            const fontSize = parseInt(textArea.style.fontSize) || 32;
+            ctx.font = fontSize + 'px ' + fontName.replace(/'/g, '');
+            ctx.fillStyle = textArea.style.color || '#0a0a0a';
+            ctx.textBaseline = 'top';
+            
+            const lines = textArea.value.split('\n');
+            let y = 24;
+            
+            lines.forEach(line => {
+                ctx.fillText(line, 65, y);
+                y += lineH;
+            });
+            
+            const link = document.createElement('a');
+            link.download = 'handwriting.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        });
+
+        // Focus on load
+        textArea.focus();
+    </script>
+</body>
+</html>
